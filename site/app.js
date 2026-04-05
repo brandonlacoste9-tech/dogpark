@@ -1,43 +1,114 @@
 import { COUNTRY_LABELS, regionLabel } from "./region-labels.js";
-import { addReview, getReviewSummary, getReviewsForPark } from "./reviews-store.js";
+import {
+  addReview,
+  exportReviewsJson,
+  getReviewSummary,
+  getReviewsForPark,
+  importReviewsJson,
+} from "./reviews-store.js";
+import { initThemeToggle, isDarkTheme } from "./theme.js";
 
 /**
- * @typedef {{ id: string, name: string, lat: number, lon: number, country: string | null, province: string | null, city: string | null, website?: string | null }} Park
+ * @typedef {{
+ *   id: string,
+ *   name: string,
+ *   lat: number,
+ *   lon: number,
+ *   country: string | null,
+ *   province: string | null,
+ *   city?: string | null,
+ *   website?: string | null,
+ *   nameEn?: string | null,
+ *   openingHours?: string | null,
+ *   fee?: string | null,
+ *   access?: string | null,
+ *   surface?: string | null,
+ *   lit?: string | null,
+ *   fence?: string | null,
+ *   dog?: string | null,
+ *   wheelchair?: string | null,
+ *   operator?: string | null,
+ * }} Park
  */
 
 /** @type {Park[]} */
 let allParks = [];
+/** @type {string | null} */
+let datasetGeneratedAt = null;
+/** @type {{ lat: number, lon: number } | null} */
+let userLocation = null;
+/** @type {string | null} */
+let lastFocusedParkId = null;
+/** @type {string | null} */
+let initialUrlParkId = null;
+/** @type {boolean} */
+let initialUrlParkApplied = false;
+
 /** @type {import("leaflet").Map | null} */
 let map = null;
-/** @type {import("leaflet").LayerGroup | null} */
+/** @type {import("leaflet").TileLayer | null} */
+let baseTileLayer = null;
+/** @type {import("leaflet").LayerGroup | import("leaflet").MarkerClusterGroup | null} */
 let markers = null;
-/** @type {import("leaflet").Marker | null} */
+/** @type {import("leaflet").CircleMarker | null} */
 let activeMarker = null;
 
 /** @type {Park | null} */
 let reviewsModalPark = null;
 
+/** @type {ReturnType<typeof setTimeout> | null} */
+let urlSyncTimer = null;
+
+/** @type {Park[]} */
+let lastFilteredParks = [];
+
 function norm(s) {
   return s.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "");
 }
 
-/**
- * @param {Park} park
- * @param {string} q
- * @param {string} country
- * @param {string} regionKey country|province
- */
-function matches(park, q, country, regionKey) {
+/** @param {{ web: boolean, lit: boolean, fenced: boolean, wheelchair: boolean, feeFree: boolean }} x */
+function matches(park, q, country, regionKey, x) {
   if (country && park.country !== country) return false;
   if (regionKey) {
     const [c, r] = regionKey.split("|");
     if (park.country !== c || park.province !== r) return false;
   }
+  if (x.web && !safeHref(park.website ?? "")) return false;
+  if (x.lit && norm(park.lit ?? "") !== "yes") return false;
+  if (x.fenced) {
+    const f = norm(park.fence ?? "");
+    if (f !== "yes" && f !== "true") return false;
+  }
+  if (x.wheelchair) {
+    const w = norm(park.wheelchair ?? "");
+    if (w !== "yes" && w !== "limited") return false;
+  }
+  if (x.feeFree && norm(park.fee ?? "") !== "no") return false;
+
   if (!q) return true;
   const reg = regionLabel(park.country, park.province);
   const ctry = park.country ? COUNTRY_LABELS[park.country] ?? park.country : "";
   const hay = norm(
-    [park.name, park.city, park.province, park.website, reg, ctry].filter(Boolean).join(" "),
+    [
+      park.name,
+      park.nameEn,
+      park.city,
+      park.province,
+      park.website,
+      reg,
+      ctry,
+      park.openingHours,
+      park.fee,
+      park.access,
+      park.surface,
+      park.lit,
+      park.fence,
+      park.dog,
+      park.wheelchair,
+      park.operator,
+    ]
+      .filter(Boolean)
+      .join(" "),
   );
   return hay.includes(norm(q));
 }
@@ -63,6 +134,204 @@ function formatPlaceLine(p) {
   return bits.join(" · ") || "North America";
 }
 
+/** @param {Park} p */
+function parkDetailChips(p) {
+  /** @type {{ label: string, value: string }[]} */
+  const chips = [];
+  if (p.openingHours) chips.push({ label: "Hours", value: p.openingHours });
+  if (p.fee) chips.push({ label: "Fee", value: p.fee });
+  if (p.access) chips.push({ label: "Access", value: p.access });
+  if (p.surface) chips.push({ label: "Surface", value: p.surface });
+  if (p.lit) chips.push({ label: "Lit", value: p.lit });
+  if (p.fence) chips.push({ label: "Fence", value: p.fence });
+  if (p.dog) chips.push({ label: "Dogs", value: p.dog });
+  if (p.wheelchair) chips.push({ label: "Wheelchair", value: p.wheelchair });
+  if (p.operator) chips.push({ label: "Operator", value: p.operator });
+  if (p.nameEn) chips.push({ label: "Also known as", value: p.nameEn });
+  return chips;
+}
+
+/** @param {Park} p */
+function chipsHtml(p) {
+  const chips = parkDetailChips(p);
+  if (!chips.length) return "";
+  const inner = chips
+    .map(
+      (c) =>
+        `<span class="park-chip" title="${escapeHtml(c.label)}"><span class="park-chip__k">${escapeHtml(c.label)}</span> <span class="park-chip__v">${escapeHtml(c.value)}</span></span>`,
+    )
+    .join("");
+  return `<div class="park-chips" role="group" aria-label="Tags from OpenStreetMap">${inner}</div>`;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** @param {Park} p */
+function distanceKm(p) {
+  if (!userLocation) return Number.POSITIVE_INFINITY;
+  return haversineKm(userLocation.lat, userLocation.lon, p.lat, p.lon);
+}
+
+/** @param {Park[]} filtered */
+function sortParksList(filtered) {
+  const sort = /** @type {HTMLSelectElement} */ (document.getElementById("sort"))?.value ?? "name-asc";
+  const copy = [...filtered];
+  if (sort === "name-desc") {
+    copy.sort((a, b) => b.name.localeCompare(a.name, "en"));
+    return copy;
+  }
+  if (sort === "dist") {
+    if (!userLocation) copy.sort((a, b) => a.name.localeCompare(b.name, "en"));
+    else copy.sort((a, b) => distanceKm(a) - distanceKm(b));
+    return copy;
+  }
+  copy.sort((a, b) => a.name.localeCompare(b.name, "en"));
+  return copy;
+}
+
+function getExtendedFilters() {
+  return {
+    web: !!/** @type {HTMLInputElement} */ (document.getElementById("filter-website"))?.checked,
+    lit: !!/** @type {HTMLInputElement} */ (document.getElementById("filter-lit"))?.checked,
+    fenced: !!/** @type {HTMLInputElement} */ (document.getElementById("filter-fenced"))?.checked,
+    wheelchair: !!/** @type {HTMLInputElement} */ (document.getElementById("filter-wheelchair"))?.checked,
+    feeFree: !!/** @type {HTMLInputElement} */ (document.getElementById("filter-feefree"))?.checked,
+  };
+}
+
+function scheduleUrlSync() {
+  if (urlSyncTimer) clearTimeout(urlSyncTimer);
+  urlSyncTimer = setTimeout(() => {
+    urlSyncTimer = null;
+    syncUrlState();
+  }, 340);
+}
+
+function syncUrlState() {
+  const u = new URL(window.location.href);
+  const q = /** @type {HTMLInputElement} */ (document.getElementById("q"))?.value.trim() ?? "";
+  if (q) u.searchParams.set("q", q);
+  else u.searchParams.delete("q");
+
+  const country = /** @type {HTMLSelectElement} */ (document.getElementById("country"))?.value ?? "";
+  if (country) u.searchParams.set("country", country);
+  else u.searchParams.delete("country");
+
+  const region = /** @type {HTMLSelectElement} */ (document.getElementById("province"))?.value ?? "";
+  if (region) u.searchParams.set("region", region);
+  else u.searchParams.delete("region");
+
+  const sort = /** @type {HTMLSelectElement} */ (document.getElementById("sort"))?.value ?? "name-asc";
+  if (sort !== "name-asc") u.searchParams.set("sort", sort);
+  else u.searchParams.delete("sort");
+
+  const x = getExtendedFilters();
+  if (x.web) u.searchParams.set("web", "1");
+  else u.searchParams.delete("web");
+  if (x.lit) u.searchParams.set("lit", "1");
+  else u.searchParams.delete("lit");
+  if (x.fenced) u.searchParams.set("fenced", "1");
+  else u.searchParams.delete("fenced");
+  if (x.wheelchair) u.searchParams.set("wheelchair", "1");
+  else u.searchParams.delete("wheelchair");
+  if (x.feeFree) u.searchParams.set("fee", "no");
+  else u.searchParams.delete("fee");
+
+  if (lastFocusedParkId) u.searchParams.set("park", lastFocusedParkId);
+  else u.searchParams.delete("park");
+
+  history.replaceState(null, "", u.toString());
+}
+
+function applyUrlToForm() {
+  const u = new URL(window.location.href);
+  const qEl = /** @type {HTMLInputElement | null} */ (document.getElementById("q"));
+  const vq = u.searchParams.get("q");
+  if (vq !== null && qEl) qEl.value = vq;
+
+  let c = u.searchParams.get("country");
+  const reg = u.searchParams.get("region");
+  if (reg && reg.includes("|") && !c) c = reg.split("|")[0] ?? null;
+  if (c) {
+    const sel = /** @type {HTMLSelectElement | null} */ (document.getElementById("country"));
+    if (sel) sel.value = c;
+    populateRegionSelect();
+  }
+
+  if (reg) {
+    const sel = /** @type {HTMLSelectElement | null} */ (document.getElementById("province"));
+    if (sel) sel.value = reg;
+  }
+
+  const sort = u.searchParams.get("sort");
+  const sortEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("sort"));
+  if (sort && sortEl && [...sortEl.options].some((o) => o.value === sort)) sortEl.value = sort;
+
+  const setChk = (id, on) => {
+    const el = /** @type {HTMLInputElement | null} */ (document.getElementById(id));
+    if (el) el.checked = on;
+  };
+  setChk("filter-website", u.searchParams.get("web") === "1");
+  setChk("filter-lit", u.searchParams.get("lit") === "1");
+  setChk("filter-fenced", u.searchParams.get("fenced") === "1");
+  setChk("filter-wheelchair", u.searchParams.get("wheelchair") === "1");
+  setChk("filter-feefree", u.searchParams.get("fee") === "no");
+
+  initialUrlParkId = u.searchParams.get("park");
+}
+
+/** @param {Park[]} parks */
+function downloadGeoJson(parks) {
+  const at = datasetGeneratedAt ?? new Date().toISOString();
+  const features = parks.map((p) => ({
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+    properties: {
+      id: p.id,
+      name: p.name,
+      country: p.country,
+      province: p.province,
+      city: p.city ?? null,
+      website: p.website ?? null,
+      opening_hours: p.openingHours ?? null,
+      fee: p.fee ?? null,
+      access: p.access ?? null,
+      surface: p.surface ?? null,
+      lit: p.lit ?? null,
+      fence: p.fence ?? null,
+      dog: p.dog ?? null,
+      wheelchair: p.wheelchair ?? null,
+      operator: p.operator ?? null,
+    },
+  }));
+  const geo = {
+    type: "FeatureCollection",
+    properties: { source: "OpenStreetMap via dogpark", datasetGeneratedAt: at, count: features.length },
+    features,
+  };
+  const blob = new Blob([JSON.stringify(geo, null, 2)], { type: "application/geo+json" });
+  const a = document.createElement("a");
+  const stub = at.slice(0, 10);
+  a.href = URL.createObjectURL(blob);
+  a.download = `dog-parks-${stub}-${features.length}.geojson`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register(new URL("sw.js", import.meta.url)).catch(() => {});
+}
+
 /** @returns {{ la: number, lo: number } | null} */
 function mapCoords(lat, lon) {
   const la = Number(lat);
@@ -70,6 +339,36 @@ function mapCoords(lat, lon) {
   if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
   if (Math.abs(la) > 90 || Math.abs(lo) > 180) return null;
   return { la, lo };
+}
+
+function mapMarkerColors() {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    color: s.getPropertyValue("--map-marker-stroke").trim() || "#1b4332",
+    fillColor: s.getPropertyValue("--map-marker-fill").trim() || "#52b788",
+  };
+}
+
+function setBaseMapLayer() {
+  if (!map || typeof L === "undefined") return;
+  if (baseTileLayer) {
+    map.removeLayer(baseTileLayer);
+    baseTileLayer = null;
+  }
+  if (isDarkTheme()) {
+    baseTileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 20,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: "abcd",
+    });
+  } else {
+    baseTileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    });
+  }
+  baseTileLayer.addTo(map);
 }
 
 function staticMapImageUrl(la, lo) {
@@ -185,6 +484,17 @@ function renderDialogReviewList(parkId) {
     body.textContent = r.text;
     card.appendChild(head);
     card.appendChild(body);
+    if (r.photoUrl) {
+      const ph = document.createElement("p");
+      ph.className = "review-card__photo";
+      const a = document.createElement("a");
+      a.href = r.photoUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "Photo link";
+      ph.appendChild(a);
+      card.appendChild(ph);
+    }
     list.appendChild(card);
   }
 }
@@ -253,8 +563,9 @@ function initReviewsDialog() {
     const rating = Number(document.getElementById("reviews-rating-value")?.value) || 5;
     const text = /** @type {HTMLTextAreaElement} */ (form.elements.namedItem("text")).value;
     const author = /** @type {HTMLInputElement} */ (form.elements.namedItem("author")).value;
+    const photoUrl = /** @type {HTMLInputElement} */ (form.elements.namedItem("photoUrl"))?.value ?? "";
     try {
-      addReview(reviewsModalPark.id, { rating, text, author });
+      addReview(reviewsModalPark.id, { rating, text, author, photoUrl });
       renderDialogReviewList(reviewsModalPark.id);
       form.reset();
       const h = document.getElementById("reviews-rating-value");
@@ -291,6 +602,7 @@ function buildPopupHtml(p) {
     html += `<img class="park-popup__map" src="${escapeHtml(src)}" width="280" height="120" alt="Map preview near ${escapeHtml(p.name)}" loading="lazy" decoding="async" />`;
   }
   html += `<div class="park-popup__place">${escapeHtml(line)}</div>`;
+  html += chipsHtml(p);
   if (web) {
     html += `<a class="park-popup__web" href="${escapeHtml(web)}" target="_blank" rel="noopener noreferrer">Website</a>`;
   }
@@ -331,6 +643,21 @@ function renderList(filtered) {
     sub.className = "sub";
     sub.textContent = formatPlaceLine(p);
     btn.appendChild(sub);
+    const chipList = parkDetailChips(p).slice(0, 4);
+    if (chipList.length) {
+      const row = document.createElement("div");
+      row.className = "park-item__chips";
+      for (const c of chipList) {
+        const sp = document.createElement("span");
+        sp.className = "park-chip park-chip--compact";
+        sp.title = `${c.label}: ${c.value}`;
+        const short =
+          c.value.length > 28 ? `${c.value.slice(0, 26).trim()}…` : c.value;
+        sp.textContent = short;
+        row.appendChild(sp);
+      }
+      btn.appendChild(row);
+    }
     btn.addEventListener("click", () => focusPark(p, btn));
     li.appendChild(btn);
     appendReviewLine(li, p);
@@ -354,25 +681,90 @@ function renderList(filtered) {
 
   const more =
     filtered.length > 500 ? ` Showing first 500 of ${filtered.length} matches.` : "";
-  meta.textContent = `${filtered.length} park${filtered.length === 1 ? "" : "s"}${more} · ${allParks.length} total in dataset`;
+  const dateBit = datasetGeneratedAt ? `${datasetGeneratedAt.slice(0, 10)} · ` : "";
+  meta.textContent = `${dateBit}${filtered.length} park${filtered.length === 1 ? "" : "s"}${more} · ${allParks.length} in dataset`;
+}
+
+function getListParkButtons() {
+  return [...document.querySelectorAll("#list .park-item__main")].filter(
+    (n) => n instanceof HTMLButtonElement,
+  );
+}
+
+/** @returns {number} index of row in buttons, -1 if panel focused / unknown, -2 if outside list rows */
+function listFocusButtonIndex(/** @type {HTMLElement | null} */ panel, buttons) {
+  if (!panel) return -2;
+  const t = document.activeElement;
+  if (!(t instanceof HTMLElement)) return -2;
+  if (t === panel) return -1;
+  if (!panel.contains(t)) return -2;
+  if (t.classList.contains("park-item__main")) {
+    const i = buttons.indexOf(/** @type {HTMLButtonElement} */ (t));
+    return i;
+  }
+  const li = t.closest(".park-item");
+  if (li && panel.contains(li)) {
+    const btn = li.querySelector(".park-item__main");
+    if (btn instanceof HTMLButtonElement) return buttons.indexOf(btn);
+  }
+  return -1;
+}
+
+function initListKeyboardNav() {
+  const panel = document.getElementById("list-panel");
+  if (!panel) return;
+
+  panel.addEventListener("keydown", (e) => {
+    const dlg = /** @type {HTMLDialogElement | null} */ (document.getElementById("reviews-dialog"));
+    if (dlg?.open) return;
+
+    const buttons = getListParkButtons();
+    if (!buttons.length) return;
+
+    let idx = listFocusButtonIndex(panel, buttons);
+    if (idx === -2) return;
+
+    const moveDown = e.key === "ArrowDown" || e.key === "ArrowRight";
+    const moveUp = e.key === "ArrowUp" || e.key === "ArrowLeft";
+    const home = e.key === "Home";
+    const end = e.key === "End";
+    if (!moveDown && !moveUp && !home && !end) return;
+
+    e.preventDefault();
+    if (home) idx = 0;
+    else if (end) idx = buttons.length - 1;
+    else if (moveDown) idx = idx < 0 ? 0 : Math.min(idx + 1, buttons.length - 1);
+    else if (moveUp) idx = idx < 0 ? buttons.length - 1 : Math.max(idx - 1, 0);
+
+    const btn = buttons[idx];
+    if (!btn) return;
+    btn.focus();
+    btn.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const id = btn.dataset.id;
+    const p = lastFilteredParks.find((x) => x.id === id);
+    if (p) focusPark(p, btn);
+  });
 }
 
 /** @param {Park} p @param {HTMLButtonElement | null} btn */
 function focusPark(p, btn) {
   if (!map || !markers) return;
+  lastFocusedParkId = p.id;
+  scheduleUrlSync();
   map.setView([p.lat, p.lon], Math.max(map.getZoom(), 14), { animate: true });
   document.querySelectorAll(".park-item__main.active").forEach((b) => b.classList.remove("active"));
   if (btn) btn.classList.add("active");
 
   if (activeMarker) {
-    activeMarker.setOpacity?.(1);
+    activeMarker.setStyle?.({ opacity: 1, fillOpacity: 0.85 });
     activeMarker = null;
   }
   markers.eachLayer((layer) => {
-    const l = /** @type {import("leaflet").Marker} */ (layer);
-    if (l.getLatLng().lat === p.lat && l.getLatLng().lng === p.lon) {
+    const id = /** @type {{ parkId?: string }} } */ (layer).parkId;
+    if (id === p.id) {
+      const l = /** @type {import("leaflet").CircleMarker} */ (layer);
       activeMarker = l;
-      l.setOpacity?.(0.85);
+      l.setStyle?.({ opacity: 0.92, fillOpacity: 0.65 });
       l.openPopup();
     }
   });
@@ -445,27 +837,34 @@ function initMap() {
   if (!el || typeof L === "undefined") return;
 
   map = L.map(el, { scrollWheelZoom: true }).setView([45, -100], 3);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  }).addTo(map);
+  setBaseMapLayer();
 
-  markers = L.layerGroup().addTo(map);
+  markers =
+    typeof L.markerClusterGroup === "function"
+      ? L.markerClusterGroup({
+          maxClusterRadius: 56,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          zoomToBoundsOnClick: true,
+        }).addTo(map)
+      : L.layerGroup().addTo(map);
 }
 
 function redrawMap(filtered) {
   if (!map || !markers) return;
   markers.clearLayers();
 
+  const mc = mapMarkerColors();
   const chunk = filtered.slice(0, 3500);
   for (const p of chunk) {
     const m = L.circleMarker([p.lat, p.lon], {
       radius: 6,
       weight: 2,
-      color: "#1b4332",
-      fillColor: "#52b788",
+      color: mc.color,
+      fillColor: mc.fillColor,
       fillOpacity: 0.85,
     });
+    /** @type {*} */ (m).parkId = p.id;
     m.bindPopup(buildPopupHtml(p), { className: "park-popup", maxWidth: 304 });
     m.on("click", () => {
       const btn = document.querySelector(`.park-item__main[data-id="${CSS.escape(p.id)}"]`);
@@ -487,9 +886,56 @@ function applyFilters() {
   const q = /** @type {HTMLInputElement} */ (document.getElementById("q"))?.value.trim() ?? "";
   const country = /** @type {HTMLSelectElement} */ (document.getElementById("country"))?.value ?? "";
   const regionKey = /** @type {HTMLSelectElement} */ (document.getElementById("province"))?.value ?? "";
-  const filtered = allParks.filter((p) => matches(p, q, country, regionKey));
-  renderList(filtered);
-  redrawMap(filtered);
+  const x = getExtendedFilters();
+  let filtered = allParks.filter((p) => matches(p, q, country, regionKey, x));
+  if (lastFocusedParkId && !filtered.some((p) => p.id === lastFocusedParkId)) lastFocusedParkId = null;
+  const filteredSorted = sortParksList(filtered);
+  lastFilteredParks = filteredSorted;
+  renderList(filteredSorted);
+  redrawMap(filteredSorted);
+  scheduleUrlSync();
+  if (!initialUrlParkApplied) {
+    if (initialUrlParkId) {
+      const p = allParks.find((px) => px.id === initialUrlParkId);
+      if (p && filteredSorted.some((px) => px.id === p.id)) {
+        requestAnimationFrame(() => {
+          const btn = document.querySelector(`.park-item__main[data-id="${CSS.escape(p.id)}"]`);
+          focusPark(p, /** @type {HTMLButtonElement} */ (btn));
+        });
+      }
+    }
+    initialUrlParkApplied = true;
+  }
+}
+
+function initReviewsBackup() {
+  document.getElementById("reviews-export")?.addEventListener("click", () => {
+    const blob = new Blob([exportReviewsJson()], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `dogpark-reviews-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  const file = /** @type {HTMLInputElement | null} */ (document.getElementById("reviews-import-file"));
+  document.getElementById("reviews-import-trigger")?.addEventListener("click", () => file?.click());
+  file?.addEventListener("change", async () => {
+    const f = file.files?.[0];
+    if (!f) return;
+    const text = await f.text();
+    file.value = "";
+    const merge = window.confirm(
+      "Merge imported reviews with what you already have in this browser?\n\nOK = merge\nCancel = replace all reviews",
+    );
+    try {
+      const r = importReviewsJson(text, { mode: merge ? "merge" : "replace" });
+      window.alert(`Imported ${r.imported} review(s) for ${r.parks} park(s).`);
+      applyFilters();
+      if (reviewsModalPark) renderDialogReviewList(reviewsModalPark.id);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Import failed.");
+    }
+  });
 }
 
 async function load() {
@@ -499,9 +945,12 @@ async function load() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     allParks = data.parks ?? [];
-    const meta = document.getElementById("meta");
-    if (meta && data.generatedAt) {
-      meta.textContent = `Dataset from ${data.generatedAt.slice(0, 10)} · ${allParks.length} parks`;
+    datasetGeneratedAt = typeof data.generatedAt === "string" ? data.generatedAt : null;
+    const hint = document.getElementById("data-hint");
+    if (hint) {
+      hint.textContent = datasetGeneratedAt
+        ? "Community-maintained map data — tags may be incomplete. Always confirm hours, fees, and rules on site before visiting."
+        : "";
     }
   } catch (e) {
     console.error(e);
@@ -512,6 +961,8 @@ async function load() {
 
   populateCountrySelect();
   populateRegionSelect();
+  applyUrlToForm();
+
   document.getElementById("q")?.addEventListener("input", () => applyFilters());
   document.getElementById("country")?.addEventListener("change", () => {
     const reg = document.getElementById("province");
@@ -520,7 +971,50 @@ async function load() {
     applyFilters();
   });
   document.getElementById("province")?.addEventListener("change", () => applyFilters());
+  document.getElementById("sort")?.addEventListener("change", () => applyFilters());
+  for (const id of ["filter-website", "filter-lit", "filter-fenced", "filter-wheelchair", "filter-feefree"]) {
+    document.getElementById(id)?.addEventListener("change", () => applyFilters());
+  }
+
+  document.getElementById("btn-near-me")?.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      window.alert("Geolocation is not available in this browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        const sortEl = /** @type {HTMLSelectElement | null} */ (document.getElementById("sort"));
+        if (sortEl) sortEl.value = "dist";
+        applyFilters();
+        if (map) map.setView([userLocation.lat, userLocation.lon], Math.max(map.getZoom(), 10));
+      },
+      () => window.alert("Could not read your location. Check browser permissions."),
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 },
+    );
+  });
+
+  document.getElementById("btn-geojson")?.addEventListener("click", () => {
+    const n = lastFilteredParks.length;
+    if (n === 0) {
+      window.alert("No parks in the current filter to export.");
+      return;
+    }
+    const cap = 8000;
+    const slice = n > cap ? lastFilteredParks.slice(0, cap) : lastFilteredParks;
+    if (n > cap)
+      window.alert(`Exporting first ${cap} of ${n} parks. Narrow filters to include fewer.`);
+    downloadGeoJson(slice);
+  });
+
   initReviewsDialog();
+  initReviewsBackup();
+  initListKeyboardNav();
+  registerServiceWorker();
+  initThemeToggle(() => {
+    setBaseMapLayer();
+    applyFilters();
+  });
   applyFilters();
 }
 

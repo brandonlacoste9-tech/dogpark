@@ -131,6 +131,15 @@ async function fetchRegion(bbox, endpoint, attempt = 1) {
   return JSON.parse(text);
 }
 
+/** First non-empty string among tag keys, or null. */
+function strTag(tags, ...keys) {
+  for (const k of keys) {
+    const v = tags[k];
+    if (v != null && String(v).trim() !== "") return String(v).trim();
+  }
+  return null;
+}
+
 /** First http(s) URL from OSM tags, or null. */
 function websiteFromTags(tags) {
   const raw =
@@ -161,7 +170,8 @@ function mergeElements(json, byKey) {
     }
     if (lat == null || lon == null) continue;
     const tags = el.tags ?? {};
-    const name = tags.name ?? tags["name:en"] ?? "Dog park";
+    const primary = tags.name ?? tags["name:en"] ?? "Dog park";
+    const nameEn = strTag(tags, "name:en");
     const key = `${el.type}/${el.id}`;
     if (byKey.has(key)) continue;
     const { country, region } = countryRegionFromLatLon(lat, lon);
@@ -169,13 +179,23 @@ function mergeElements(json, byKey) {
       id: key,
       osmType: el.type,
       osmId: el.id,
-      name: String(name).trim() || "Dog park",
+      name: String(primary).trim() || "Dog park",
+      nameEn: nameEn && nameEn !== String(primary).trim() ? nameEn : null,
       lat,
       lon,
       country,
       province: region,
-      city: tags["addr:city"] ?? tags["addr:hamlet"] ?? null,
+      city: strTag(tags, "addr:city", "addr:hamlet", "addr:town", "addr:village"),
       website: websiteFromTags(tags),
+      openingHours: strTag(tags, "opening_hours"),
+      fee: strTag(tags, "fee"),
+      access: strTag(tags, "access"),
+      surface: strTag(tags, "surface"),
+      lit: strTag(tags, "lit"),
+      fence: strTag(tags, "fence", "fenced"),
+      dog: strTag(tags, "dog"),
+      wheelchair: strTag(tags, "wheelchair"),
+      operator: strTag(tags, "operator"),
     });
   }
 }

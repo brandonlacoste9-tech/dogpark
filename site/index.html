@@ -3,6 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#1b4332" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("dogpark-theme");
+          if (t === "dark") document.documentElement.setAttribute("data-theme", "dark");
+          else if (t === "light") document.documentElement.removeAttribute("data-theme");
+          else if (window.matchMedia("(prefers-color-scheme: dark)").matches)
+            document.documentElement.setAttribute("data-theme", "dark");
+        } catch (e) {}
+      })();
+    </script>
     <title>Dog parks in North America</title>
     <meta
       name="description"
@@ -14,10 +27,15 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-header">
       <div class="site-header__glow" aria-hidden="true"></div>
       <div class="dog-decor-layer dog-decor-layer--header" aria-hidden="true">
@@ -63,6 +81,19 @@
         </span>
       </div>
       <div class="wrap site-header__inner">
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false" aria-label="Switch theme" title="Theme">
+          <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+          </span>
+          <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+          </span>
+        </button>
         <div class="site-header__top">
           <div class="site-header__icon" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
@@ -82,7 +113,7 @@
       </div>
     </header>
 
-    <main class="wrap main">
+    <main class="wrap main" id="main-content">
       <div class="dog-decor-layer dog-decor-layer--main" aria-hidden="true">
         <span class="dog-decor dog-decor--bone dog-decor--muted">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="52" height="34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -108,40 +139,86 @@
         </span>
       </div>
       <section class="controls" aria-label="Search and filters">
-        <label class="field field--search">
-          <span class="label">Search</span>
-          <span class="field__input-wrap">
-            <span class="field__icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
+        <div class="controls__row controls__row--primary">
+          <label class="field field--search">
+            <span class="label">Search</span>
+            <span class="field__input-wrap">
+              <span class="field__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+              </span>
+              <input type="search" id="q" placeholder="Name, city, tags, or URL…" autocomplete="off" />
             </span>
-            <input type="search" id="q" placeholder="Name, city, or URL…" autocomplete="off" />
-          </span>
-        </label>
-        <label class="field">
-          <span class="label">Country</span>
-          <select id="country">
-            <option value="">All countries</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="label">State / province</span>
-          <select id="province">
-            <option value="">All regions</option>
-          </select>
-        </label>
-        <p class="meta" id="meta">Loading data…</p>
+          </label>
+          <label class="field">
+            <span class="label">Country</span>
+            <select id="country">
+              <option value="">All countries</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="label">State / province</span>
+            <select id="province">
+              <option value="">All regions</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="label">Sort</span>
+            <select id="sort" aria-label="Sort results">
+              <option value="name-asc">Name (A–Z)</option>
+              <option value="name-desc">Name (Z–A)</option>
+              <option value="dist">Nearest first</option>
+            </select>
+          </label>
+        </div>
+        <div class="controls__row controls__row--tags">
+          <fieldset class="tag-filters">
+            <legend class="tag-filters__legend">OpenStreetMap tags</legend>
+            <label class="check">
+              <input type="checkbox" id="filter-website" />
+              <span>Has website</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="filter-lit" />
+              <span>Lit (<code>lit=yes</code>)</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="filter-fenced" />
+              <span>Fenced</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="filter-wheelchair" />
+              <span>Wheelchair (<code>yes</code> or <code>limited</code>)</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="filter-feefree" />
+              <span>Free (<code>fee=no</code>)</span>
+            </label>
+          </fieldset>
+          <div class="controls__actions">
+            <button type="button" class="btn btn--secondary" id="btn-near-me">Near me</button>
+            <button type="button" class="btn btn--secondary" id="btn-geojson">Download GeoJSON</button>
+          </div>
+        </div>
+        <p class="meta" id="meta" aria-live="polite" aria-atomic="true">Loading data…</p>
+        <p class="data-hint" id="data-hint"></p>
       </section>
 
       <div class="split">
         <section class="panel list-panel" aria-label="Results">
           <header class="panel-head">
-            <h2 class="panel-title">Directory</h2>
-            <p class="panel-desc">Select a park to move the map</p>
+            <h2 class="panel-title" id="directory-heading">Directory</h2>
+            <p class="panel-desc">Select a park to move the map, or focus the list below and use arrow keys</p>
           </header>
-          <div class="list-scroll">
+          <div
+            class="list-scroll"
+            id="list-panel"
+            tabindex="0"
+            role="region"
+            aria-labelledby="directory-heading"
+          >
             <ul class="park-list" id="list"></ul>
           </div>
         </section>
@@ -187,6 +264,10 @@
               placeholder="Fencing, water, shade, mud, how busy it was…"
             ></textarea>
           </label>
+          <label class="reviews-form__field">
+            <span class="reviews-form__label">Photo link (optional)</span>
+            <input type="url" name="photoUrl" id="reviews-photo" inputmode="url" placeholder="https://…" maxlength="2000" />
+          </label>
           <p class="reviews-form__hint">
             Static site — reviews never upload anywhere. They are kept in this browser only (localStorage).
           </p>
@@ -226,11 +307,20 @@
           Always confirm hours and local leash rules on site.
           <span class="site-footer__sep">·</span>
           Fully static: visitor reviews use browser storage only (not shared between users).
+          <span class="site-footer__sep">·</span>
+          OSM tags can be incomplete — verify on site or
+          <a href="https://www.openstreetmap.org/edit">improve the map</a>.
+        </p>
+        <p class="site-footer__reviews-backup">
+          <button type="button" class="btn btn--text" id="reviews-export">Export reviews backup</button>
+          <button type="button" class="btn btn--text" id="reviews-import-trigger">Import reviews…</button>
+          <input type="file" id="reviews-import-file" accept="application/json,.json" hidden />
         </p>
       </div>
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
     <script src="app.js" type="module"></script>
   </body>
 </html>
