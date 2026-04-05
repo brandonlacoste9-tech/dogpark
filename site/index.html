@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dog parks in North America</title>
+    <meta
+      name="description"
+      content="Searchable directory of dog parks mapped from OpenStreetMap across Canada, the United States, and Mexico."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__glow" aria-hidden="true"></div>
+      <div class="dog-decor-layer dog-decor-layer--header" aria-hidden="true">
+        <span class="dog-decor dog-decor--bowl">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 48" width="56" height="48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 22c.5 14 10.5 22 22 22s21.5-8 22-22" />
+            <path d="M2 22h52" />
+            <ellipse cx="28" cy="22" rx="24" ry="7" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--bone">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="64" height="40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="6" />
+            <circle cx="12" cy="28" r="6" />
+            <circle cx="52" cy="12" r="6" />
+            <circle cx="52" cy="28" r="6" />
+            <path d="M16 12h32M16 28h32M12 16v8M52 16v8" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--ball">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="52" height="52" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="24" cy="24" r="16" />
+            <path d="M10 20c6 2 12 3 18 2.5M30 34c2-5 4.5-10 3-16" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--chew">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 40" width="52" height="40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 20h10a6 6 0 0 0 6-6h0a6 6 0 0 1 6-6h8" />
+            <path d="M44 20H34a6 6 0 0 1-6 6h0a6 6 0 0 0-6 6H14" />
+            <circle cx="8" cy="20" r="5" />
+            <circle cx="44" cy="20" r="5" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--paw">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="44" height="44" fill="currentColor" stroke="none" opacity="0.9">
+            <ellipse cx="24" cy="32" rx="12" ry="10" />
+            <circle cx="14" cy="14" r="5" />
+            <circle cx="24" cy="10" r="5" />
+            <circle cx="34" cy="14" r="5" />
+            <circle cx="18" cy="22" r="4" />
+            <circle cx="30" cy="22" r="4" />
+          </svg>
+        </span>
+      </div>
+      <div class="wrap site-header__inner">
+        <div class="site-header__top">
+          <div class="site-header__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21.5c4.36-4.2 7.5-8.15 7.5-12.28A7.5 7.5 0 0 0 4.5 9.22c0 4.13 3.14 8.08 7.5 12.28z" />
+              <circle cx="12" cy="9.5" r="2.25" fill="currentColor" stroke="none" />
+            </svg>
+          </div>
+          <div class="site-header__intro">
+            <p class="site-header__eyebrow">Open map data · ODbL</p>
+            <h1>Dog parks across North America</h1>
+            <p class="lede">
+              Find off-leash and fenced parks from
+              <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>. Search, filter by region, or browse the map.
+            </p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap main">
+      <div class="dog-decor-layer dog-decor-layer--main" aria-hidden="true">
+        <span class="dog-decor dog-decor--bone dog-decor--muted">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="52" height="34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="6" />
+            <circle cx="12" cy="28" r="6" />
+            <circle cx="52" cy="12" r="6" />
+            <circle cx="52" cy="28" r="6" />
+            <path d="M16 12h32M16 28h32M12 16v8M52 16v8" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--ball dog-decor--muted">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="24" cy="24" r="15" />
+            <path d="M11 18c7 2 14 2 21 1M26 36c3-6 5.5-12 4-19" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--bowl-sm dog-decor--muted">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 48" width="48" height="42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 22c.5 14 10.5 22 22 22s21.5-8 22-22" />
+            <path d="M2 22h52" />
+            <ellipse cx="28" cy="22" rx="24" ry="7" />
+          </svg>
+        </span>
+      </div>
+      <section class="controls" aria-label="Search and filters">
+        <label class="field field--search">
+          <span class="label">Search</span>
+          <span class="field__input-wrap">
+            <span class="field__icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </span>
+            <input type="search" id="q" placeholder="Name, city, or URL…" autocomplete="off" />
+          </span>
+        </label>
+        <label class="field">
+          <span class="label">Country</span>
+          <select id="country">
+            <option value="">All countries</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">State / province</span>
+          <select id="province">
+            <option value="">All regions</option>
+          </select>
+        </label>
+        <p class="meta" id="meta">Loading data…</p>
+      </section>
+
+      <div class="split">
+        <section class="panel list-panel" aria-label="Results">
+          <header class="panel-head">
+            <h2 class="panel-title">Directory</h2>
+            <p class="panel-desc">Select a park to move the map</p>
+          </header>
+          <div class="list-scroll">
+            <ul class="park-list" id="list"></ul>
+          </div>
+        </section>
+        <section class="panel map-panel" aria-label="Map">
+          <header class="panel-head panel-head--map">
+            <h2 class="panel-title">Map</h2>
+            <p class="panel-desc">Open markers for details</p>
+          </header>
+          <div class="map-shell">
+            <div id="map" role="application" aria-label="Map of dog parks"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <dialog class="reviews-dialog" id="reviews-dialog" aria-labelledby="reviews-dialog-title">
+      <div class="reviews-dialog__card">
+        <button type="button" class="reviews-dialog__close" id="reviews-dialog-close" aria-label="Close dialog">
+          ×
+        </button>
+        <h2 class="reviews-dialog__title" id="reviews-dialog-title">Visitor reviews</h2>
+        <p class="reviews-dialog__park" id="reviews-dialog-park"></p>
+        <div class="reviews-dialog__list" id="reviews-dialog-list"></div>
+        <form class="reviews-form" id="reviews-form">
+          <p class="reviews-form__heading">Add your visit</p>
+          <div class="reviews-form__rating">
+            <span class="reviews-form__rating-label">Rating</span>
+            <div class="star-input" id="star-input" role="radiogroup" aria-label="Rating 1 to 5 stars"></div>
+            <input type="hidden" name="rating" id="reviews-rating-value" value="5" />
+          </div>
+          <label class="reviews-form__field">
+            <span class="reviews-form__label">Your name (optional)</span>
+            <input type="text" name="author" id="reviews-author" maxlength="80" autocomplete="nickname" />
+          </label>
+          <label class="reviews-form__field">
+            <span class="reviews-form__label">Review</span>
+            <textarea
+              name="text"
+              id="reviews-text"
+              required
+              maxlength="2000"
+              rows="4"
+              placeholder="Fencing, water, shade, mud, how busy it was…"
+            ></textarea>
+          </label>
+          <p class="reviews-form__hint">
+            Static site — reviews never upload anywhere. They are kept in this browser only (localStorage).
+          </p>
+          <button type="submit" class="reviews-form__submit">Post review</button>
+          <p class="reviews-form__error" id="reviews-form-error" hidden></p>
+        </form>
+      </div>
+    </dialog>
+
+    <footer class="site-footer">
+      <div class="dog-decor-layer dog-decor-layer--footer" aria-hidden="true">
+        <span class="dog-decor dog-decor--toy-footer">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 36" width="40" height="30" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+            <path d="M6 18h8l4-8h8l4 8h8" />
+            <circle cx="10" cy="18" r="5" />
+            <circle cx="38" cy="18" r="5" />
+          </svg>
+        </span>
+        <span class="dog-decor dog-decor--paw-footer">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="36" height="36" fill="currentColor" stroke="none">
+            <ellipse cx="20" cy="28" rx="10" ry="8" />
+            <circle cx="11" cy="12" r="4" />
+            <circle cx="20" cy="8" r="4" />
+            <circle cx="29" cy="12" r="4" />
+            <circle cx="14" cy="18" r="3" />
+            <circle cx="26" cy="18" r="3" />
+          </svg>
+        </span>
+      </div>
+      <div class="wrap site-footer__inner">
+        <p class="site-footer__note">
+          Refresh data with <code>node scripts/fetch-parks.mjs</code>
+          <span class="site-footer__sep">·</span>
+          interrupted? <code>node scripts/fetch-parks.mjs --resume</code>
+        </p>
+        <p class="site-footer__disclaimer">
+          Always confirm hours and local leash rules on site.
+          <span class="site-footer__sep">·</span>
+          Fully static: visitor reviews use browser storage only (not shared between users).
+        </p>
+      </div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
