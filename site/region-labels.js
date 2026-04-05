@@ -6,6 +6,29 @@ export const COUNTRY_LABELS = {
   MX: "Mexico",
 };
 
+export const COUNTRY_LABELS_FR = {
+  CA: "Canada",
+  US: "États-Unis",
+  MX: "Mexique",
+};
+
+export const COUNTRY_LABELS_ES = {
+  CA: "Canadá",
+  US: "Estados Unidos",
+  MX: "México",
+};
+
+/**
+ * @param {string | null | undefined} code
+ * @param {"en" | "fr" | "es"} locale
+ */
+export function countryLabel(code, locale = "en") {
+  if (!code) return "";
+  if (locale === "fr") return COUNTRY_LABELS_FR[code] ?? COUNTRY_LABELS[code] ?? code;
+  if (locale === "es") return COUNTRY_LABELS_ES[code] ?? COUNTRY_LABELS[code] ?? code;
+  return COUNTRY_LABELS[code] ?? code;
+}
+
 export const REGION_LABELS = {
   CA: {
     AB: "Alberta",

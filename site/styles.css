@@ -153,51 +153,64 @@ body::before {
   background: linear-gradient(145deg, #050a08 0%, #0f1f18 40%, #1a3d2e 78%, #245a44 100%);
 }
 
-.theme-toggle {
+.site-header__prefs {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 4;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  gap: 0.55rem 0.75rem;
+  max-width: min(100% - 1rem, 26rem);
+}
+
+.pref-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.18rem;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.12);
-  color: #e8f5e9;
+  background: rgba(0, 0, 0, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.pref-btn {
+  margin: 0;
+  padding: 0.32rem 0.5rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.45);
+.pref-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.theme-toggle:focus-visible {
+.pref-btn:focus-visible {
   outline: 2px solid var(--accent-glow);
   outline-offset: 2px;
 }
 
-.theme-toggle__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.pref-btn--active {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
 }
 
-.theme-toggle__icon--sun {
-  display: none;
-}
-
-[data-theme="dark"] .theme-toggle__icon--moon {
-  display: none;
-}
-
-[data-theme="dark"] .theme-toggle__icon--sun {
-  display: flex;
+.pref-group--theme .pref-btn {
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
 }
 
 /* —— Dog-themed decorations (inline SVG, no external assets) —— */
@@ -334,7 +347,21 @@ body::before {
   display: flex;
   gap: 1.25rem;
   align-items: flex-start;
-  padding-right: 3rem;
+  padding-right: min(13rem, 32vw);
+}
+
+@media (max-width: 640px) {
+  .site-header__top {
+    padding-right: 0;
+    padding-top: 3.25rem;
+  }
+
+  .site-header__prefs {
+    left: 0;
+    right: 0;
+    max-width: none;
+    justify-content: flex-start;
+  }
 }
 
 .site-header__icon {
@@ -1398,7 +1425,7 @@ body::before {
 
 @media print {
   .skip-link,
-  .theme-toggle,
+  .site-header__prefs,
   .dog-decor-layer,
   .controls__actions,
   .tag-filters,

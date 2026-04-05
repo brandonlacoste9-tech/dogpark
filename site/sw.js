@@ -1,5 +1,5 @@
 /** App shell + offline fallback for static dog park directory */
-const CACHE = "dogpark-shell-v1";
+const CACHE = "dogpark-shell-v2";
 
 /** Same-origin paths under ./ */
 const PRECACHE = [
@@ -7,6 +7,7 @@ const PRECACHE = [
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./i18n.js",
   "./theme.js",
   "./region-labels.js",
   "./reviews-store.js",

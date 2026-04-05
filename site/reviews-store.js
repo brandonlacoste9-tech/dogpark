@@ -2,6 +2,8 @@
  * Browser-only review storage for static hosting: reads/writes localStorage.
  * No network calls; data never leaves the visitor's device unless they clear site data.
  */
+import { t } from "./i18n.js";
+
 const STORAGE_KEY = "dogpark-reviews-v1";
 
 /**
@@ -59,7 +61,7 @@ function safePhotoUrl(url) {
 export function addReview(parkId, input) {
   const rating = Math.min(5, Math.max(1, Math.round(Number(input.rating))));
   const text = String(input.text ?? "").trim().slice(0, 2000);
-  if (!text) throw new Error("Please write a short review.");
+  if (!text) throw new Error(t("reviewEmpty"));
 
   const author = String(input.author ?? "").trim().slice(0, 80) || "Anonymous";
   const photoUrl = safePhotoUrl(input.photoUrl) ?? null;

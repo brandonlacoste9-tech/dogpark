@@ -1,4 +1,12 @@
-import { COUNTRY_LABELS, regionLabel } from "./region-labels.js";
+import {
+  applyDomI18n,
+  getLocale,
+  htmlLang,
+  initLocaleToolbar,
+  syncThemeLabels,
+  t,
+} from "./i18n.js";
+import { COUNTRY_LABELS, countryLabel, regionLabel } from "./region-labels.js";
 import {
   addReview,
   exportReviewsJson,
@@ -6,7 +14,7 @@ import {
   getReviewsForPark,
   importReviewsJson,
 } from "./reviews-store.js";
-import { initThemeToggle, isDarkTheme } from "./theme.js";
+import { initThemeSegment, isDarkTheme, syncThemeSegmentButtons } from "./theme.js";
 
 /**
  * @typedef {{
@@ -87,7 +95,9 @@ function matches(park, q, country, regionKey, x) {
 
   if (!q) return true;
   const reg = regionLabel(park.country, park.province);
-  const ctry = park.country ? COUNTRY_LABELS[park.country] ?? park.country : "";
+  const loc = getLocale();
+  const ctry = park.country ? countryLabel(park.country, loc) : "";
+  const ctryEn = park.country ? COUNTRY_LABELS[park.country] ?? park.country : "";
   const hay = norm(
     [
       park.name,
@@ -97,6 +107,7 @@ function matches(park, q, country, regionKey, x) {
       park.website,
       reg,
       ctry,
+      ctryEn,
       park.openingHours,
       park.fee,
       park.access,
@@ -126,28 +137,29 @@ function safeHref(url) {
 }
 
 function formatPlaceLine(p) {
+  const loc = getLocale();
   const bits = [];
   if (p.city) bits.push(p.city);
   const rl = regionLabel(p.country, p.province);
   if (rl) bits.push(rl);
-  if (p.country && COUNTRY_LABELS[p.country]) bits.push(COUNTRY_LABELS[p.country]);
-  return bits.join(" · ") || "North America";
+  if (p.country) bits.push(countryLabel(p.country, loc));
+  return bits.join(" · ") || t("placeFallback");
 }
 
 /** @param {Park} p */
 function parkDetailChips(p) {
   /** @type {{ label: string, value: string }[]} */
   const chips = [];
-  if (p.openingHours) chips.push({ label: "Hours", value: p.openingHours });
-  if (p.fee) chips.push({ label: "Fee", value: p.fee });
-  if (p.access) chips.push({ label: "Access", value: p.access });
-  if (p.surface) chips.push({ label: "Surface", value: p.surface });
-  if (p.lit) chips.push({ label: "Lit", value: p.lit });
-  if (p.fence) chips.push({ label: "Fence", value: p.fence });
-  if (p.dog) chips.push({ label: "Dogs", value: p.dog });
-  if (p.wheelchair) chips.push({ label: "Wheelchair", value: p.wheelchair });
-  if (p.operator) chips.push({ label: "Operator", value: p.operator });
-  if (p.nameEn) chips.push({ label: "Also known as", value: p.nameEn });
+  if (p.openingHours) chips.push({ label: t("chipHours"), value: p.openingHours });
+  if (p.fee) chips.push({ label: t("chipFee"), value: p.fee });
+  if (p.access) chips.push({ label: t("chipAccess"), value: p.access });
+  if (p.surface) chips.push({ label: t("chipSurface"), value: p.surface });
+  if (p.lit) chips.push({ label: t("chipLit"), value: p.lit });
+  if (p.fence) chips.push({ label: t("chipFence"), value: p.fence });
+  if (p.dog) chips.push({ label: t("chipDog"), value: p.dog });
+  if (p.wheelchair) chips.push({ label: t("chipWheelchair"), value: p.wheelchair });
+  if (p.operator) chips.push({ label: t("chipOperator"), value: p.operator });
+  if (p.nameEn) chips.push({ label: t("chipNameEn"), value: p.nameEn });
   return chips;
 }
 
@@ -161,7 +173,7 @@ function chipsHtml(p) {
         `<span class="park-chip" title="${escapeHtml(c.label)}"><span class="park-chip__k">${escapeHtml(c.label)}</span> <span class="park-chip__v">${escapeHtml(c.value)}</span></span>`,
     )
     .join("");
-  return `<div class="park-chips" role="group" aria-label="Tags from OpenStreetMap">${inner}</div>`;
+  return `<div class="park-chips" role="group" aria-label="${escapeHtml(t("chipsAria"))}">${inner}</div>`;
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -390,7 +402,7 @@ function appendMapLinksRow(li, p) {
   const wrap = document.createElement("div");
   wrap.className = "park-maps";
   wrap.setAttribute("role", "group");
-  wrap.setAttribute("aria-label", "Open this location in other maps");
+  wrap.setAttribute("aria-label", t("mapsGroupAria"));
 
   const addLink = (label, href) => {
     const a = document.createElement("a");
@@ -410,11 +422,13 @@ function appendMapLinksRow(li, p) {
     return s;
   };
 
-  wrap.appendChild(addLink("Map", `https://www.openstreetmap.org/?mlat=${la}&mlon=${lo}#map=15/${la}/${lo}`));
+  wrap.appendChild(
+    addLink(t("mapLinkOsm"), `https://www.openstreetmap.org/?mlat=${la}&mlon=${lo}#map=15/${la}/${lo}`),
+  );
   wrap.appendChild(sep());
-  wrap.appendChild(addLink("Google Maps", `https://www.google.com/maps?q=${la},${lo}`));
+  wrap.appendChild(addLink(t("mapLinkGoogle"), `https://www.google.com/maps?q=${la},${lo}`));
   wrap.appendChild(sep());
-  wrap.appendChild(addLink("Apple Maps", `https://maps.apple.com/?ll=${la},${lo}`));
+  wrap.appendChild(addLink(t("mapLinkApple"), `https://maps.apple.com/?ll=${la},${lo}`));
   li.appendChild(wrap);
 }
 
@@ -438,7 +452,10 @@ function initStarInput() {
     b.className = "star-input__btn";
     b.textContent = "★";
     b.dataset.value = String(v);
-    b.setAttribute("aria-label", `${v} star${v > 1 ? "s" : ""}`);
+    b.setAttribute(
+      "aria-label",
+      v <= 1 ? t("starAriaOne", { n: v }) : t("starAriaMany", { n: v }),
+    );
     b.addEventListener("click", () => {
       hidden.value = String(v);
       syncStarButtons(host, v);
@@ -456,7 +473,7 @@ function renderDialogReviewList(parkId) {
   if (revs.length === 0) {
     const p = document.createElement("p");
     p.className = "reviews-dialog__empty";
-    p.textContent = "No reviews yet in this browser. Add yours below.";
+    p.textContent = t("noReviewsYet");
     list.appendChild(p);
     return;
   }
@@ -467,7 +484,7 @@ function renderDialogReviewList(parkId) {
     head.className = "review-card__head";
     const stars = document.createElement("span");
     stars.className = "review-card__stars";
-    stars.setAttribute("aria-label", `${r.rating} out of 5`);
+    stars.setAttribute("aria-label", t("reviewStarsOutOf", { rating: r.rating }));
     stars.textContent = "★".repeat(r.rating) + "☆".repeat(5 - r.rating);
     const who = document.createElement("span");
     who.className = "review-card__author";
@@ -475,7 +492,9 @@ function renderDialogReviewList(parkId) {
     const when = document.createElement("time");
     when.className = "review-card__time";
     when.dateTime = r.createdAt;
-    when.textContent = new Date(r.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" });
+    when.textContent = new Date(r.createdAt).toLocaleDateString(htmlLang(getLocale()), {
+      dateStyle: "medium",
+    });
     head.appendChild(stars);
     head.appendChild(who);
     head.appendChild(when);
@@ -491,7 +510,7 @@ function renderDialogReviewList(parkId) {
       a.href = r.photoUrl;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      a.textContent = "Photo link";
+      a.textContent = t("photoLink");
       ph.appendChild(a);
       card.appendChild(ph);
     }
@@ -531,16 +550,20 @@ function appendReviewLine(li, p) {
   const meta = document.createElement("span");
   meta.className = "park-review-line__summary";
   if (sum) {
-    meta.textContent = `${sum.avg.toFixed(1)} / 5 · ${sum.count} ${sum.count === 1 ? "review" : "reviews"}`;
-    meta.setAttribute("aria-label", `Average ${sum.avg.toFixed(1)} of 5 from ${sum.count} reviews`);
+    const w = sum.count === 1 ? t("reviewOne") : t("reviewMany");
+    meta.textContent = `${sum.avg.toFixed(1)} / 5 · ${sum.count} ${w}`;
+    meta.setAttribute(
+      "aria-label",
+      t("summaryAria", { avg: sum.avg.toFixed(1), count: sum.count }),
+    );
   } else {
-    meta.textContent = "No reviews in this browser yet";
+    meta.textContent = t("noReviewsBrowser");
     meta.classList.add("park-review-line__summary--empty");
   }
   const revBtn = document.createElement("button");
   revBtn.type = "button";
   revBtn.className = "park-review-line__btn";
-  revBtn.textContent = sum ? "See reviews" : "Write a review";
+  revBtn.textContent = sum ? t("reviewSee") : t("reviewWrite");
   revBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     openReviewsModal(p);
@@ -604,18 +627,18 @@ function buildPopupHtml(p) {
   html += `<div class="park-popup__place">${escapeHtml(line)}</div>`;
   html += chipsHtml(p);
   if (web) {
-    html += `<a class="park-popup__web" href="${escapeHtml(web)}" target="_blank" rel="noopener noreferrer">Website</a>`;
+    html += `<a class="park-popup__web" href="${escapeHtml(web)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("popupWebsite"))}</a>`;
   }
   if (c) {
     const osm = `https://www.openstreetmap.org/?mlat=${c.la}&mlon=${c.lo}#map=15/${c.la}/${c.lo}`;
     const g = `https://www.google.com/maps?q=${c.la},${c.lo}`;
     const apple = `https://maps.apple.com/?ll=${c.la},${c.lo}`;
-    html += `<div class="park-popup__maps"><a href="${escapeHtml(osm)}" target="_blank" rel="noopener noreferrer">OpenStreetMap</a><span class="park-popup__dot" aria-hidden="true">·</span><a href="${escapeHtml(g)}" target="_blank" rel="noopener noreferrer">Google Maps</a><span class="park-popup__dot" aria-hidden="true">·</span><a href="${escapeHtml(apple)}" target="_blank" rel="noopener noreferrer">Apple Maps</a></div>`;
+    html += `<div class="park-popup__maps"><a href="${escapeHtml(osm)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("mapLinkOsm"))}</a><span class="park-popup__dot" aria-hidden="true">·</span><a href="${escapeHtml(g)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("mapLinkGoogle"))}</a><span class="park-popup__dot" aria-hidden="true">·</span><a href="${escapeHtml(apple)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("mapLinkApple"))}</a></div>`;
   }
   const sum = getReviewSummary(p.id);
   const revBtnLabel = sum
-    ? `Reviews (${sum.count}) · ${sum.avg.toFixed(1)}★`
-    : "Reviews — write one";
+    ? t("popupReviewsFmt", { count: sum.count, avg: sum.avg.toFixed(1) })
+    : t("popupReviewsEmpty");
   html += `<button type="button" class="park-popup__reviews-btn" data-park-id="${escapeHtml(p.id)}">${escapeHtml(revBtnLabel)}</button>`;
   return html;
 }
@@ -669,7 +692,7 @@ function renderList(filtered) {
       a.href = href;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      a.textContent = "Website";
+      a.textContent = t("linkWebsite");
       a.addEventListener("click", (e) => e.stopPropagation());
       web.appendChild(a);
       li.appendChild(web);
@@ -679,10 +702,16 @@ function renderList(filtered) {
   }
   ul.appendChild(frag);
 
-  const more =
-    filtered.length > 500 ? ` Showing first 500 of ${filtered.length} matches.` : "";
+  const more = filtered.length > 500 ? t("metaMore", { n: filtered.length }) : "";
   const dateBit = datasetGeneratedAt ? `${datasetGeneratedAt.slice(0, 10)} · ` : "";
-  meta.textContent = `${dateBit}${filtered.length} park${filtered.length === 1 ? "" : "s"}${more} · ${allParks.length} in dataset`;
+  const plural = filtered.length === 1 ? "" : "s";
+  meta.textContent = t("metaLine", {
+    date: dateBit,
+    n: filtered.length,
+    plural,
+    more,
+    total: allParks.length,
+  });
 }
 
 function getListParkButtons() {
@@ -778,14 +807,25 @@ function countrySort(a, b) {
   return a.localeCompare(b);
 }
 
+function refreshCountryOptionLabels() {
+  const sel = document.getElementById("country");
+  if (!sel) return;
+  const loc = getLocale();
+  for (const opt of sel.options) {
+    if (!opt.value) opt.textContent = t("countryAll");
+    else opt.textContent = countryLabel(opt.value, loc);
+  }
+}
+
 function populateCountrySelect() {
   const sel = document.getElementById("country");
   if (!sel) return;
   const codes = [...new Set(allParks.map((p) => p.country).filter(Boolean))].sort(countrySort);
+  const loc = getLocale();
   for (const c of codes) {
     const opt = document.createElement("option");
     opt.value = c;
-    opt.textContent = COUNTRY_LABELS[c] ?? c;
+    opt.textContent = countryLabel(c, loc);
     sel.appendChild(opt);
   }
 }
@@ -802,9 +842,11 @@ function populateRegionSelect() {
 
   const countryFilter = countrySel?.value ?? "";
   regSel.replaceChildren();
+  const coll = new Intl.Collator(htmlLang(getLocale()), { sensitivity: "base" });
+
   const all = document.createElement("option");
   all.value = "";
-  all.textContent = "All regions";
+  all.textContent = t("regionAll");
   regSel.appendChild(all);
 
   const keys = new Set();
@@ -815,19 +857,20 @@ function populateRegionSelect() {
     keys.add(k);
   }
 
+  const loc = getLocale();
   const sorted = [...keys].sort((a, b) => {
     const [ca, ra] = a.split("|");
     const [cb, rb] = b.split("|");
-    const la = `${COUNTRY_LABELS[ca] ?? ca} ${regionLabel(ca, ra)}`;
-    const lb = `${COUNTRY_LABELS[cb] ?? cb} ${regionLabel(cb, rb)}`;
-    return la.localeCompare(lb, "en");
+    const la = `${countryLabel(ca, loc)} ${regionLabel(ca, ra)}`;
+    const lb = `${countryLabel(cb, loc)} ${regionLabel(cb, rb)}`;
+    return coll.compare(la, lb);
   });
 
   for (const k of sorted) {
     const [c, r] = k.split("|");
     const opt = document.createElement("option");
     opt.value = k;
-    opt.textContent = `${COUNTRY_LABELS[c] ?? c} · ${regionLabel(c, r)}`;
+    opt.textContent = `${countryLabel(c, loc)} · ${regionLabel(c, r)}`;
     regSel.appendChild(opt);
   }
 }
@@ -908,6 +951,17 @@ function applyFilters() {
   }
 }
 
+function onLocaleOrThemeLabelsChange() {
+  applyDomI18n();
+  syncThemeLabels();
+  syncThemeSegmentButtons();
+  refreshCountryOptionLabels();
+  populateRegionSelect();
+  initStarInput();
+  if (reviewsModalPark) renderDialogReviewList(reviewsModalPark.id);
+  applyFilters();
+}
+
 function initReviewsBackup() {
   document.getElementById("reviews-export")?.addEventListener("click", () => {
     const blob = new Blob([exportReviewsJson()], { type: "application/json" });
@@ -924,21 +978,23 @@ function initReviewsBackup() {
     if (!f) return;
     const text = await f.text();
     file.value = "";
-    const merge = window.confirm(
-      "Merge imported reviews with what you already have in this browser?\n\nOK = merge\nCancel = replace all reviews",
-    );
+    const merge = window.confirm(t("importMergeTitle"));
     try {
       const r = importReviewsJson(text, { mode: merge ? "merge" : "replace" });
-      window.alert(`Imported ${r.imported} review(s) for ${r.parks} park(s).`);
+      window.alert(t("importSuccess", { count: r.imported, parks: r.parks }));
       applyFilters();
       if (reviewsModalPark) renderDialogReviewList(reviewsModalPark.id);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Import failed.");
+      window.alert(e instanceof Error ? e.message : t("importFail"));
     }
   });
 }
 
 async function load() {
+  applyDomI18n();
+  syncThemeLabels();
+  syncThemeSegmentButtons();
+
   initMap();
   try {
     const res = await fetch("data/parks.json", { cache: "no-store" });
@@ -947,15 +1003,11 @@ async function load() {
     allParks = data.parks ?? [];
     datasetGeneratedAt = typeof data.generatedAt === "string" ? data.generatedAt : null;
     const hint = document.getElementById("data-hint");
-    if (hint) {
-      hint.textContent = datasetGeneratedAt
-        ? "Community-maintained map data — tags may be incomplete. Always confirm hours, fees, and rules on site before visiting."
-        : "";
-    }
+    if (hint) hint.textContent = datasetGeneratedAt ? t("dataHintStatic") : "";
   } catch (e) {
     console.error(e);
     const meta = document.getElementById("meta");
-    if (meta) meta.textContent = "Could not load data/parks.json — run node scripts/fetch-parks.mjs";
+    if (meta) meta.textContent = t("loadError");
     return;
   }
 
@@ -978,7 +1030,7 @@ async function load() {
 
   document.getElementById("btn-near-me")?.addEventListener("click", () => {
     if (!navigator.geolocation) {
-      window.alert("Geolocation is not available in this browser.");
+      window.alert(t("geoNoBrowser"));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -989,7 +1041,7 @@ async function load() {
         applyFilters();
         if (map) map.setView([userLocation.lat, userLocation.lon], Math.max(map.getZoom(), 10));
       },
-      () => window.alert("Could not read your location. Check browser permissions."),
+      () => window.alert(t("geoDenied")),
       { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 },
     );
   });
@@ -997,21 +1049,21 @@ async function load() {
   document.getElementById("btn-geojson")?.addEventListener("click", () => {
     const n = lastFilteredParks.length;
     if (n === 0) {
-      window.alert("No parks in the current filter to export.");
+      window.alert(t("geojsonEmpty"));
       return;
     }
     const cap = 8000;
     const slice = n > cap ? lastFilteredParks.slice(0, cap) : lastFilteredParks;
-    if (n > cap)
-      window.alert(`Exporting first ${cap} of ${n} parks. Narrow filters to include fewer.`);
+    if (n > cap) window.alert(t("geojsonCap", { cap, n }));
     downloadGeoJson(slice);
   });
 
   initReviewsDialog();
   initReviewsBackup();
   initListKeyboardNav();
+  initLocaleToolbar(onLocaleOrThemeLabelsChange);
   registerServiceWorker();
-  initThemeToggle(() => {
+  initThemeSegment(() => {
     setBaseMapLayer();
     applyFilters();
   });

@@ -42,28 +42,35 @@ export function applyThemeFromStorageOrSystem() {
   }
 }
 
-function syncToggleButton() {
-  const btn = document.getElementById("theme-toggle");
-  if (!btn) return;
-  const dark = isDarkTheme();
-  btn.setAttribute("aria-pressed", dark ? "true" : "false");
-  btn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
-  btn.title = dark ? "Light theme" : "Dark theme";
+export function syncThemeSegmentButtons() {
+  const light = document.getElementById("theme-light");
+  const dark = document.getElementById("theme-dark");
+  if (!light || !dark) return;
+  const isDark = isDarkTheme();
+  light.setAttribute("aria-pressed", String(!isDark));
+  dark.setAttribute("aria-pressed", String(isDark));
+  light.classList.toggle("pref-btn--active", !isDark);
+  dark.classList.toggle("pref-btn--active", isDark);
 }
 
 /**
  * @param {() => void} onThemeChange
  */
-export function initThemeToggle(onThemeChange) {
-  const btn = document.getElementById("theme-toggle");
-  if (!btn) return;
+export function initThemeSegment(onThemeChange) {
+  const light = document.getElementById("theme-light");
+  const dark = document.getElementById("theme-dark");
+  if (!light || !dark) return;
 
-  syncToggleButton();
+  syncThemeSegmentButtons();
 
-  btn.addEventListener("click", () => {
-    const next = isDarkTheme() ? "light" : "dark";
-    applyTheme(next);
-    syncToggleButton();
+  light.addEventListener("click", () => {
+    applyTheme("light");
+    syncThemeSegmentButtons();
+    onThemeChange?.();
+  });
+  dark.addEventListener("click", () => {
+    applyTheme("dark");
+    syncThemeSegmentButtons();
     onThemeChange?.();
   });
 }
