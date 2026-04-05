@@ -1,5 +1,5 @@
 /** App shell + offline fallback for static dog park directory */
-const CACHE = "dogpark-shell-v2";
+const CACHE = "dogpark-shell-v3";
 
 /** Same-origin paths under ./ */
 const PRECACHE = [

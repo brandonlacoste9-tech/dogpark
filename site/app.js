@@ -341,7 +341,10 @@ function downloadGeoJson(parks) {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register(new URL("sw.js", import.meta.url)).catch(() => {});
+  navigator.serviceWorker
+    .register(new URL("sw.js", import.meta.url))
+    .then((reg) => reg?.update())
+    .catch(() => {});
 }
 
 /** @returns {{ la: number, lo: number } | null} */
@@ -599,7 +602,7 @@ function initReviewsDialog() {
     } catch (ex) {
       if (err) {
         err.hidden = false;
-        err.textContent = ex instanceof Error ? ex.message : "Could not save review.";
+        err.textContent = ex instanceof Error ? ex.message : t("reviewSaveError");
       }
     }
   });
@@ -622,7 +625,7 @@ function buildPopupHtml(p) {
   let html = `<strong>${escapeHtml(p.name)}</strong>`;
   if (c) {
     const src = staticMapImageUrl(c.la, c.lo);
-    html += `<img class="park-popup__map" src="${escapeHtml(src)}" width="280" height="120" alt="Map preview near ${escapeHtml(p.name)}" loading="lazy" decoding="async" />`;
+    html += `<img class="park-popup__map" src="${escapeHtml(src)}" width="280" height="120" alt="${escapeHtml(t("mapPreviewAlt", { name: p.name }))}" loading="lazy" decoding="async" />`;
   }
   html += `<div class="park-popup__place">${escapeHtml(line)}</div>`;
   html += chipsHtml(p);
