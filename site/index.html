@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#1b4332" />
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4276130467303652"
-         crossorigin="anonymous"></script>
+    <meta name="google-adsense-account" content="ca-pub-4276130467303652" />
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4276130467303652"
+      crossorigin="anonymous"
+    ></script>
     <script>
       (function () {
         try {
@@ -223,6 +227,12 @@
         <p class="data-hint" id="data-hint"></p>
       </section>
 
+      <!-- AdSense display unit (fills only when slot ID is set in adsense-config.js; Auto ads may still appear) -->
+      <aside class="ad-unit" id="ad-display" hidden aria-label="Advertisement">
+        <p class="ad-unit__label" data-i18n="adLabel">Advertisement</p>
+        <div class="ad-unit__slot"></div>
+      </aside>
+
       <div class="split">
         <section class="panel list-panel" data-i18n-aria="listPanelAria" aria-label="Results">
           <header class="panel-head">
@@ -251,6 +261,11 @@
           </div>
         </section>
       </div>
+
+      <aside class="ad-unit ad-unit--footer" id="ad-footer" hidden aria-label="Advertisement">
+        <p class="ad-unit__label" data-i18n="adLabel">Advertisement</p>
+        <div class="ad-unit__slot"></div>
+      </aside>
     </main>
 
     <dialog class="reviews-dialog" id="reviews-dialog" aria-labelledby="reviews-dialog-title">
@@ -361,6 +376,11 @@
             Import reviews…
           </button>
           <input type="file" id="reviews-import-file" accept="application/json,.json" hidden />
+        </p>
+        <p class="site-footer__legal">
+          <a href="privacy.html" data-i18n="footerPrivacy">Privacy policy</a>
+          <span class="site-footer__sep">·</span>
+          <span data-i18n="footerAdsNote">Ads by Google</span>
         </p>
       </div>
     </footer>

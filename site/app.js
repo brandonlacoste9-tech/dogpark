@@ -15,6 +15,7 @@ import {
   importReviewsJson,
 } from "./reviews-store.js";
 import { initThemeSegment, isDarkTheme, syncThemeSegmentButtons } from "./theme.js";
+import { initAdSenseUnits } from "./adsense.js";
 
 /**
  * @typedef {{
@@ -1070,6 +1071,7 @@ async function load() {
     setBaseMapLayer();
     applyFilters();
   });
+  initAdSenseUnits();
   applyFilters();
 }
 
